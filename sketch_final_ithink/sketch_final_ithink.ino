@@ -6,11 +6,10 @@ const int IN2 = 9;
 const int IN3 = 10;
 const int IN4 = 11;
 
-int threshold = 4; // distance in cm to consider "blocked"
+int threshold = 4;
 
 void setup() {
   Serial.begin(9600);
-
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
 
@@ -23,66 +22,55 @@ void setup() {
 void loop() {
   int distance = getDistance();
 
-  if (distance >= 1 && distance <= 400) {
-    if (distance > threshold) {
-      moveForward();
-    } else {
-      stopBot();
-      delay(300);
+  if (distance < 2 || distance > 400) {
+    distance = getDistance(); // retry once if reading is invalid
+  }
 
-      // Try turning left first
+  Serial.print("Distance: ");
+  Serial.println(distance);
+
+  if (distance > threshold) {
+    moveForward();
+  } else {
+    stopBot();
+    delay(100);
+
+    // Try turning right (actual direction, previously labeled left)
+    turnRight();
+    delay(400);
+    stopBot();
+    delay(200);
+
+    int afterRight = getDistance();
+
+    if (afterRight <= threshold) {
+      // Path still blocked → perform 180° turn
       turnLeft();
       delay(400);
       stopBot();
-      delay(300);
+      delay(200);
 
-      // Check if the new direction is clear
-      int newDistance = getDistance(); 
+      turnLeft();
+      delay(400);
+      stopBot();
+      delay(200);
 
-      if (newDistance <= threshold) {
-        // Left path also blocked → turn right twice
-        turnRight();
+      // Recheck after U-turn
+      int afterUTurn = getDistance();
+      if (afterUTurn <= threshold) {
+        // Still blocked → turn left to explore a new path
+        turnLeft();
         delay(400);
         stopBot();
-        delay(300);
-
-        turnRight();
-        delay(400);
-        stopBot();
-        delay(300);
-        // Check right hand side distance and then decide to go forward or to continue in the loop
+        delay(200);
       }
     }
-  } else {
-    stopBot(); // fallback if reading is invalid
   }
 
-  delay(50);
+  delay(30); // quick loop delay for responsiveness
 }
 
-// ===== Distance Sensing =====
-
-int getDistance() {
-  long duration;
-  int distance;
-
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-
-  duration = pulseIn(echoPin, HIGH);
-  distance = duration * 0.034 / 2;
-
-  Serial.print("Distance: ");
-  Serial.print(distance);
-  Serial.println(" cm");
-
-  return distance;
-}
-
-// ===== Motor Control =====
+// === Motor Control ===
 
 void moveForward() {
   digitalWrite(IN1, HIGH);
@@ -98,16 +86,37 @@ void stopBot() {
   digitalWrite(IN4, LOW);
 }
 
-void turnLeft() {
+// 🔄 Actually turns right in physical setup
+void turnRight() {
   digitalWrite(IN1, LOW);
-  digitalWrite(IN2, HIGH); // Left wheel reverse
+  digitalWrite(IN2, HIGH);
   digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);  // Right wheel forward
+  digitalWrite(IN4, LOW);
 }
 
-void turnRight() {
+// 🔄 Actually turns left in physical setup
+void turnLeft() {
   digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);  // Left wheel forward
+  digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
-  digitalWrite(IN4, HIGH); // Right wheel reverse
+  digitalWrite(IN4, HIGH);
+}
+
+// === Distance Sensor ===
+
+int getDistance() {
+  long duration;
+  int distance;
+
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // Timeout after 30 ms if no echo is received
+  duration = pulseIn(echoPin, HIGH, 30000);
+  distance = duration * 0.034 / 2;
+
+  return distance;
 }
